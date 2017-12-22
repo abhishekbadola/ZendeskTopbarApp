@@ -1,9 +1,9 @@
 {
-  "name": "NowFloats Support Plugin",
+  "name": "YOURBRAND Support Plugin",
   "author": {
     "name": "Zendesk",
-    "email": "developers@nowfloats.com",
-    "url": "https://develop.withfloats.com"
+    "email": "YOUR_SUPPORT_EMAIL",
+    "url": "YOUR_DEVELOPER_SUPPORT_URL"
   },
   "defaultLocale": "en",
   "private": true,
