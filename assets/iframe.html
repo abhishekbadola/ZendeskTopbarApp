@@ -1,0 +1,389 @@
+<html style="overflow-y: auto">
+
+<head>
+  <link rel="stylesheet" href="https://assets.zendesk.com/apps/sdk-assets/css/2/zendesk_garden.css" type="text/css">
+  <link rel="stylesheet" href="styles.css" type="text/css">
+</head>
+
+<body>
+  <section data-main id="main-section" style="padding: 10px">
+    Waiting for a call...
+  </section>
+
+  <script type="text/javascript" src="https://assets.zendesk.com/apps/sdk/2.0/zaf_sdk.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+
+  <script>
+    // Initialise the Zendesk JavaScript API client
+    // https://developer.zendesk.com/apps/docs/apps-v2
+    var client = ZAFClient.init();
+
+    console.log(client);
+
+    var App = function () {};
+    App.prototype = {
+      tag: null,
+      apiEndpoint: "https://YOUR_APP_URL.zendesk.com",
+      render: function (data) {
+        this.tag = data;
+        this.openModal();
+      },
+
+      resize: function () {
+        client.invoke('resize', {
+          height: 400,
+          width: 400
+        });
+      },
+
+      openModal: function () {
+        var redirectionUri = "YOUR_APP_REDIRECTION_URL";
+        window.open(redirectionUri, '_blank');
+      },
+
+      GoBack: function (firstView) {
+        $("#go-back").on("click", function () {
+          $("#main-section").html(firstView);
+        });
+      }
+    };
+
+    var app = new App();
+
+    var popoverInitialised = false;
+
+    function init(location) {
+      if (location === "top_bar") {
+        client.on('YOUR_EVENT_NAME_FIRED_FROM_BACKEND', function (data) {
+          if (data) {
+            client.invoke('popover', 'hide');
+            client.invoke('popover', 'show');
+            app.resize();
+            app.render(data);
+            notified = true;
+            console.log(data);
+            var reqUrl = "YOUR_BRAND_API_TO_FETCH_RELEVANT_DATA_ON_EVNT_TRIGGER_NAMED"
+            $.ajax({
+              url: reqUrl,
+              method: "GET",
+              dataType: "JSON",
+              success: function (res) {
+                if (res) {
+                  var config = {
+                    url: app.apiEndpoint + "/api/v2/search.json?query=status<solved requester:" +
+                      res.Email + " type:ticket&sort_by=created_at&sort_order=desc",
+                    type: "GET",
+                    dataType: "JSON",
+                    contentType: 'application/json'
+                  };
+
+                  var callerDetails =
+                    `
+                          <table>
+                              <tbody>
+                                <tr>
+                                  <td><b>Email:<b></td>
+                                  <td>
+                                    ` +
+                    '<a href="mailto:' + res.Email + '">' +
+                    res.Email +
+                    '</a>' +
+                    `
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td><b>Phone:<b></td>
+                                  <td>
+                                  ` +
+                    '<a href="tel:' + res.PrimaryNumber + '">' +
+                    res.PrimaryNumber +
+                    '</a>' +
+                    `
+                                  </td>
+                                </tr>
+                              </tbody>  
+                          </table>
+                    `;
+
+                  client.request(config).then(
+                    function (data) {
+                      app.resize();
+                      if (data.error) {
+                        console.log(data.error + '===>> ' + data.description);
+                      } else {
+                        var ticketRequesterId;
+                        var ticketsList = data.results.reduce(function (ticketsList, item, index) {
+                          if (!ticketRequesterId) ticketRequesterId = item.requester_id;
+                          return ticketsList +
+                            `
+                        <div class="c-chk c-chk--radio u-mb-xs">
+                          <input class="c-chk__input" id="nft-` +
+                            index +
+                            `" name="nf-tickets" type="radio" value="` + item.id + `" title="` + item.subject +
+                            `">
+                          <label class="c-chk__label u-regular" for="nft-` +
+                            index + `">` + item.subject +
+                            `</label>
+                        </div>
+                      `;
+                        }, "");
+
+                        var tElem = "";
+                        if (ticketsList) {
+                          tElem =
+                            `
+                        <br>
+                        <div>
+                          <legend class="c-input-label u-mt-xs-">Unsolved Tickets</legend>
+                          ` +
+                            ticketsList +
+                            `
+                          <p class="">&#9757; Select a ticket</p>
+                        </div>
+                      `;
+                        }
+
+                        var btnElem =
+                          `
+                      <br>
+                      <p style="text-align: center"><button class="c-btn c-btn--primary" id="create-new-ticket">Create a new ticket</button></p>
+                      ` +
+                          (ticketsList ?
+                            `
+                      <br>
+                      <p style="text-align: center"><button class="c-btn c-btn--primary" id="link-existing-ticket">Link to an existing ticket</button></p>
+                    ` :
+                            '');
+
+                        var firstView = callerDetails + '<hr>' + tElem + btnElem;
+
+                        $("#main-section").html(firstView);
+
+                        $("#create-new-ticket").on("click", function () {
+                          $("#main-section").html("Checking user profile...");
+
+                          var userEmail;
+                          if (res && res.Email) {
+                            userEmail = res.Email;
+                            NewUser(userEmail);
+                          } else {
+                            NewUser("");
+                          }
+                        });
+
+
+                        function NewUser(userEmail) {
+                          var userElem =
+                            `
+                                <div class="l-wrapper--370 u-mb-lg" id="create-user-form">
+                                  <div class="l-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <label class="c-txt__label l-grid__item u-1/3">Enter requester details:</label>
+                                    </div>
+                                  </div>
+                                  <div class="l-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <label class="c-txt__label l-grid__item u-1/3" for="nf-user-name">Name:</label><input class="c-txt__input l-grid__item u-2/3" id="nf-user-name" placeholder="Enter name of requester" type="text">
+                                    </div>
+                                  </div>
+                                  <div class="l-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <label class="c-txt__label l-grid__item u-1/3" for="nf-user-email">Email:</label><input class="c-txt__input l-grid__item u-2/3" id="nf-user-email" placeholder="Enter email of requester" type="email" value="` +
+                            userEmail +
+                            `">
+                                    </div>
+                                  </div>
+                                  <div class="xs-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <button class="c-btn c-btn--primary" id="confirm-user">Save</button>
+                                    </div>
+                                  </div>
+                                  <div class="xs-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <button class="c-btn c-btn--danger" id="go-back">Go back</button>
+                                    </div>
+                                  </div>
+                                </div>
+                              `;
+
+                          $("#main-section").html(userElem);
+
+                          $("#confirm-user").on("click", function () {
+                            userEmail = $("#nf-user-email").val();
+                            var uData = {
+                              "user": {
+                                "name": $("#nf-user-name").val(),
+                                "email": userEmail
+                              }
+                            };
+                            var usetConfig = {
+                              url: app.apiEndpoint + "/api/v2/users/create_or_update.json",
+                              type: "POST",
+                              dataType: "JSON",
+                              contentType: 'application/json',
+                              data: JSON.stringify(uData)
+                            };
+
+                            client.request(usetConfig).then(function (uRes) {
+                              $("#main-section").html(
+                                `
+                              <label class="c-txt__label">Requester saved successfully !!!<br><br> Please wait...</label><hr>
+                            `
+                              );
+                              NewTicket(uRes.user.id, true);
+                              console.log("Requester successfully saved");
+                            }, function (err) {
+                              console.log(err.responseText);
+                            });
+                          });
+
+                          app.GoBack(firstView);
+                        }
+
+                        var selectedTicketId; // For Linking existing ticket
+                        function NewTicket(requesterId, isNewTicket) {
+                          var ticketElem =
+                            `
+                                <div class="l-wrapper--370 u-mb-lg" id="create-ticket-form">
+                                  <div class="l-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <label class="c-txt__label l-grid__item u-1/3">Enter ticket details:</label>
+                                    </div>
+                                  </div>
+                                  ` +
+                            (isNewTicket ?
+                              `
+                                  <div class="l-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <label class="c-txt__label l-grid__item u-1/3" for="nf-subject">Subject:</label><input class="c-txt__input l-grid__item u-2/3" id="nf-subject" placeholder="Enter subject for ticket.." type="text" value="Attaching call record">
+                                    </div>
+                                  </div>
+                                  ` :
+                              '') +
+                            `
+                                  <div class="l-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <label class="c-txt__label l-grid__item u-1/3" for="nf-comment">Comment:</label>
+                                      <textarea style="margin-left: 20px;" class="c-txt__input c-txt__input--area is-resizable l-grid__item u-2/3" id="nf-comment" placeholder="Enter comment here...">Attaching call recording URI</textarea>
+                                    </div>
+                                  </div>
+                                  <div class="xs-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <button class="c-btn c-btn--primary" id="confirm-ticket">Save</button>
+                                    </div>
+                                  </div>
+                                  <div class="xs-grid">
+                                    <div class="c-txt u-mb-sm">
+                                      <button class="c-btn c-btn--danger" id="go-back">Go back</button>
+                                    </div>
+                                  </div>
+                                </div>
+                              `;
+
+                          $("#main-section").html(ticketElem);
+
+                          $("#confirm-ticket").on("click", function () {
+                            client.get('currentUser').then(function (agent) {
+                              var tData = {
+                                "ticket": {
+                                  "assignee_id": parseInt(agent.currentUser.id),
+                                  "requester_id": parseInt(requesterId),
+                                  "status": "open",
+                                  //"type": "call",
+                                  "priority": "normal",
+                                  "comment": $("#nf-comment").val()
+                                }
+                              };
+
+                              var tEnd, reqType;
+                              if (isNewTicket) {
+                                tData.ticket["subject"] = $("#nf-subject").val();
+                                tEnd = "/api/v2/tickets.json";
+                                reqType = "POST";
+                              } else {
+                                tEnd = "/api/v2/tickets/" + selectedTicketId + ".json";
+                                reqType = "PUT";
+                              }
+
+                              var tConfig = {
+                                url: app.apiEndpoint + tEnd,
+                                type: reqType,
+                                dataType: "JSON",
+                                contentType: 'application/json',
+                                data: JSON.stringify(tData)
+                              };
+
+                              client.request(tConfig).then(function (tRes) {
+                                $("#main-section").html(
+                                  `
+                              <label class="c-txt__label">Ticket saved successfully !!!<br><br> Please wait while we redirect...</label><hr>
+                            `
+                                );
+                                setTimeout(function () {
+                                  $("#main-section").html("Waiting for a call...");
+                                }, 3000);
+                                console.log("Ticket successfully saved");
+                              }, function (err) {
+                                console.log(err.responseText);
+                              });
+
+                            }, function (err) {
+                              console.log(err.responseText);
+                            });
+                          });
+
+                          app.GoBack(firstView);
+                        }
+
+                        if (ticketsList) {
+                          $("#link-existing-ticket").on("click", function () {
+                            selectedTicketId = $("input[name=nf-tickets]:checked").val();
+                            NewTicket(ticketRequesterId, false);
+                          });
+                        }
+                      }
+                    },
+                    function (err) {
+                      $("#main-section").html(firstView);
+                      console.log(err.responseText);
+                    }
+                  );
+                }
+              }
+            });
+          }
+        });
+      }
+    }
+
+    function mainEl() {
+      return document.querySelector('section[data-main]');
+    }
+
+    client.on('app.registered', function (data) {
+      var topBarClientPromise = client.get('instances').then(function (instancesData) {
+        var instances = instancesData.instances;
+        for (var instanceGuid in instances) {
+          if (instances[instanceGuid].location === 'top_bar') {
+            return client.instance(instanceGuid);
+          }
+        }
+      });
+
+      topBarClientPromise.then(function (topBarClient) {
+        if (!popoverInitialised) {
+          topBarClient.invoke('popover', {
+            width: 400, // The special value auto is also allowed for the height property only.
+            height: 400
+          });
+          topBarClient.invoke('popover', 'hide');
+          popoverInitialised = true;
+
+          init(data.context.location);
+        }
+      });
+    });
+  </script>
+</body>
+
+</html>
